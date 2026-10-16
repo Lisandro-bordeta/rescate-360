@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "SHIELD",
+    "slug": "shield-evacuacion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#0D47A1"
+    },
+    "ios": {
+      "bundleIdentifier": "ar.gob.shield",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SHIELD usa tu ubicación para guiarte a un refugio seguro y para que los equipos de rescate puedan encontrarte en caso de emergencia."
+      }
+    },
+    "android": {
+      "package": "ar.gob.shield",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "SEND_SMS", "RECEIVE_SMS"]
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-location",
+      "expo-sqlite"
+    ],
+    "extra": {
+      "apiUrl": "https://api.shield.gob.ar",
+      "miArgentina": {
+        "issuer": "https://auth.miargentina.gob.ar",
+        "clientId": "shield-client-id",
+        "scopes": ["openid", "profile", "email", "phone"]
+      },
+      "smsGatewayNumber": "+5491100000000"
+    }
+  }
+}

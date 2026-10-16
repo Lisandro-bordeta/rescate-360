@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SHIELD — Demo Emergencia Inundaciones (Frontend Simulado)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #020617; color: #e2e8f0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; overflow: hidden; }
+
+  /* ===== Cabecera ===== */
+  header {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px;
+    background: #0f172a; border-bottom: 2px solid #1e293b;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; z-index: 60;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.1rem; letter-spacing: -0.5px; }
+  .brand .dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; animation: blink 1.2s infinite; }
+  .brand span.accent { color: #fbbf24; }
+  .top-right { display: flex; align-items: center; gap: 14px; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+  .badge { padding: 2px 8px; border: 1px solid #334155; border-radius: 10px; background: #1e293b; color: #94a3b8; }
+
+  /* ===== Mapa con imagen real (webp) ===== */
+  #map-wrap {
+    position: relative; height: calc(100vh - 56px); width: 100%;
+    overflow: hidden; margin-top: 56px;
+    border: 2px solid #334155;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+    background: #020617;
+  }
+  #map-wrap img.map-image {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    z-index: 1;
+    opacity: 0.9;
+  }
+
+  /* Overlay muy sutil sobre el mapa (para que se vea la imagen) */
+  #map-overlay {
+    position: absolute; inset: 0;
+    background: rgba(2, 6, 23, 0.08);
+    z-index: 3;
+  }
+
+  /* Cuadrícula de coordenadas */
+  #map-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+    background-size: 80px 80px;
+    opacity: 0.35;
+  }
+
+  /* Calles simuladas (red urbana) */
+  #map-streets {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.06) 2px, transparent 2px),
+      linear-gradient(90deg, rgba(255,255,255,0.06) 2px, transparent 2px);
+    background-size: 200px 200px;
+    opacity: 0.35;
+  }
+
+  /* Área afectada (celeste 10% de opacidad) */
+  #area-afectada {
+    position: absolute; left: 10%; top: 15%; width: 80%; height: 70%;
+    background: rgba(59, 130, 246, 0.10);
+    border: 2px dashed rgba(59, 130, 246, 0.5);
+    border-radius: 24px;
+    z-index: 8;
+    animation: areaPulse 6s ease-in-out infinite;
+  }
+  #area-label {
+    position: absolute; top: 10px; left: 12px;
+    font-size: 10px; font-weight: 800; color: #3b82f6;
+    background: rgba(11,17,32,0.6); padding: 2px 8px; border-radius: 4px;
+    border: 1px solid rgba(59,130,246,0.5);
+  }
+  @keyframes areaPulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.03); }
+  }
+
+  /* Marcadores */
+  #markers { position: absolute; inset: 0; z-index: 50; }
+  .marker {
+    position: absolute; width: 34px; height: 34px; border-radius: 50%;
+    border: 3px solid #fff; box-shadow: 0 0 16px rgba(0,0,0,0.7);
+    cursor: pointer; transform: translate(-50%, -50%); z-index: 100;
+    display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 12px;
+  }
+  .marker.red { background: #ef4444; color: #fff; animation: pulseRed 2s infinite; }
+  .marker.yellow { background: #fbbf24; color: #7c3a2d; }
+  .marker.orange { background: #f97316; color: #fff; }
+  .marker .tag { font-size: 10px; }
+
+  /* Pop-up */
+  #popup {
+    position: absolute; z-index: 200; display: none;
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 320px; background: #0f172a; border: 2px solid #334155;
+    border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+    padding: 18px; color: #e2e8f0;
+  }
+  #popup.show { display: block; animation: popupIn .25s ease-out; }
+  @keyframes popupIn { from { opacity: 0; transform: translate(-50%, -55%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+  .popup-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: #64748b; cursor: pointer; font-size: 18px; line-height: 1; }
+  .popup-close:hover { color: #fff; }
+  .popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px; }
+  .popup-id { font-weight: 800; font-size: 14px; }
+  .badge-st { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid; }
+  .st-high { background: #7f1d1d; color: #fca5a5; border-color: #ef4444; }
+  .st-medium { background: #713f12; color: #fcd34d; border-color: #fbbf24; }
+  .st-pending { background: #1e293b; color: #94a3b8; border-color: #334155; }
+  .popup-row { font-size: 12px; color: #94a3b8; margin: 7px 0; display: flex; justify-content: space-between; }
+  .popup-row .val { color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .popup-sms { margin-top: 12px; padding: 10px; background: #020617; border: 1px solid #1e293b; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: #fbbf24; word-break: break-all; }
+
+  /* ===== Panel de controles flotante ===== */
+  #panel {
+    position: fixed; top: 72px; left: 16px; width: 340px; max-height: calc(100vh - 90px);
+    overflow-y: auto; background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(16px); border: 1px solid #334155;
+    border-radius: 16px; padding: 18px; z-index: 55;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6);
+  }
+  #panel::-webkit-scrollbar { width: 6px; }
+  #panel::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+  .panel-title { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: #fbbf24; font-weight: 800; font-size: 1rem; }
+  .panel-title .led { width: 7px; height: 7px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 8px #22c55e; }
+  .contador-personas { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+  .contador-personas .numero { font-size: 1.5rem; font-weight: 900; color: #fbbf24; font-variant-numeric: tabular-nums; }
+  .contador-personas .label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+
+  section { margin-bottom: 14px; padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; }
+  section:last-child { margin-bottom: 0; }
+  .sec-head { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+
+  button.btn {
+    width: 100%; padding: 11px 14px; border: none; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all .15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  button.btn:active { transform: scale(0.97); }
+  .btn-demo { background: #1e3a8a; color: #bfdbfe; border: 1px solid #3b82f6; }
+  .btn-demo:hover { background: #2563eb; }
+  .btn-gnss { background: #334155; color: #fff; }
+  .btn-gnss:hover { background: #475569; }
+  .btn-alert { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+  .btn-alert:hover { background: #991b1b; }
+  .btn-reset { margin-top: 10px; background: transparent; color: #64748b; border: 1px solid #334155; font-size: 0.75rem; padding: 6px 10px; }
+  .btn-reset:hover { color: #ef4444; border-color: #ef4444; }
+
+  .env-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .env-btn { flex: 1; background: #334155; color: #cbd5e1; border: 1px solid #475569; padding: 9px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; text-align: center; }
+  .env-btn.active { background: #1e3a8a; color: #bfdbfe; border-color: #3b82f6; }
+  .env-action { font-size: 0.82rem; color: #cbd5e1; padding: 8px; background: #0f172a; border-radius: 6px; border: 1px solid #1e293b; line-height: 1.4; }
+
+  .pri-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; }
+  .pri-row input { accent-color: #fbbf24; width: 17px; height: 17px; }
+  .pri-row span { font-size: 0.85rem; color: #cbd5e1; }
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 0.75rem; padding: 2px 8px; background: #713f12; color: #fcd34d; border: 1px solid #fbbf24; border-radius: 10px; }
+
+  .resp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .resp-ok { background: #14532d; color: #86efac; border: 1px solid #22c55e; }
+  .resp-ok:hover { background: #15803d; }
+  .resp-null { background: #1e293b; color: #cbd5e1; border: 1px solid #475569; }
+  .resp-null:hover { background: #334155; }
+
+  /* Consola SMS */
+  .console { height: 140px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: #bbf0d1; line-height: 1.5; }
+  .console-line { margin: 3px 0; white-space: pre-wrap; word-break: break-all; }
+  .console-line.send { color: #fbbf24; }
+  .console-line.recv { color: #34d399; }
+  .console-line.err { color: #f87171; }
+  .console-line.info { color: #94a3b8; }
+
+  /* Lista eventos */
+  .events-list { max-height: 100px; overflow-y: auto; font-size: 0.78rem; color: #94a3b8; margin-bottom: 8px; }
+  .ev-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; cursor: pointer; }
+  .ev-item:hover { background: rgba(255,255,255,0.03); border-radius: 4px; padding: 4px; margin: 1px -4px 5px -4px; }
+  .ev-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .ev-id { font-family: ui-monospace, monospace; color: #cbd5e1; }
+  .ev-st { font-size: 0.72rem; font-weight: 700; }
+
+  .hint { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes pulseRed {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 24px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+  @keyframes floodPulse {
+    0%,100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.03); }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="dot"></div>
+      SHIELD<span class="accent">.</span>EMERGENCIA
+    </div>
+    <div class="top-right">
+      <span id="clock" class="font-mono">--:--:--</span>
+      <span class="badge">SIN CONECTIVIDAD (SIMULADO)</span>
+    </div>
+  </header>
+
+  <!-- Mapa -->
+  <div id="map-wrap">
+    <img class="map-image" src="mapa.png" alt="Mapa Berazategui" />
+    <div id="map-overlay"></div>
+    <div id="map-grid"></div>
+    <div id="map-streets"></div>
+    <div id="area-afectada"><div id="area-label">ÁREA AFECTADA — 10% OPACIDAD</div></div>
+    <div id="markers"></div>
+    <div id="popup">
+      <button class="popup-close" onclick="closePopup()">✕</button>
+      <div class="popup-header">
+        <span class="popup-id" id="popId">ID #—</span>
+        <span class="badge-st st-high" id="popSt">ALTO</span>
+      </div>
+      <div class="popup-row"><span>GNSS</span><span class="val" id="popCoord">—</span></div>
+      <div class="popup-row"><span>Prioridad</span><span class="val" id="popPri">—</span></div>
+      <div class="popup-row"><span>Entorno</span><span class="val" id="popEnv">—</span></div>
+      <div class="popup-row"><span>Estado</span><span class="val" id="popStatus">—</span></div>
+      <div class="popup-sms" id="popSms">—</div>
+    </div>
+  </div>
+
+  <!-- Panel controles -->
+  <div id="panel">
+    <div class="panel-title"><div class="led"></div>Controles de Simulación</div>
+
+    <div class="contador-personas">
+      <span class="numero" id="contadorPersonas">0</span>
+      <span class="label">personas afectadas en mapa</span>
+    </div>
+
+    <section>
+      <div class="sec-head">🚀 Inicio rápido</div>
+      <button class="btn btn-demo" onclick="app.demoRapida()">▶ Demo Rápida (puntos de ejemplo)</button>
+      <div class="hint">Agrega puntos amarillos y rojos al mapa al instante.</div>
+    </section>
+
+    <section>
+      <div class="sec-head">📡 1. Geolocalización GNSS (Offline)</div>
+      <button class="btn btn-gnss" onclick="app.simulateGNSS()">▶ Simular Lectura de Posición GNSS</button>
+      <div style="margin-top:8px; font-size:0.8rem; color:#94a3b8;">Coordenadas: <span id="gnssVal" class="val">--, --</span></div>
+    </section>
+
+    <section>
+      <div class="sec-head">👤 2. Vulnerabilidad / Prioridad</div>
+      <label class="pri-row"><input type="checkbox" value="child" onchange="app.togglePri('child',this.checked)"><span>Niño</span></label>
+      <label class="pri-row"><input type="checkbox" value="elder" onchange="app.togglePri('elder',this.checked)"><span>Adulto Mayor</span></label>
+      <label class="pri-row"><input type="checkbox" value="disabled" onchange="app.togglePri('disabled',this.checked)"><span>Discapacidad</span></label>
+      <div id="chips"><span style="font-size:0.75rem;color:#64748b;">Sin prioridad (estándar)</span></div>
+    </section>
+
+    <section>
+      <div class="sec-head">🌍 3. Zona Detectada</div>
+      <div class="env-row">
+        <div class="env-btn" id="envRural" onclick="app.setEnv('rural')">Campo / Rural</div>
+        <div class="env-btn" id="envUrban" onclick="app.setEnv('urban')">Ciudad / Urbana</div>
+      </div>
+      <div class="env-action" id="envAction">Seleccione un entorno para ver la acción de respuesta.</div>
+    </section>
+
+    <section>
+      <div class="sec-head">📱 4. Protocolo de Verificación (SMS)</div>
+      <button class="btn btn-alert" id="btnAlert" onclick="app.triggerAlert()">⚠️ Simular Alerta de Inmovilidad (Fuera de Refugio)</button>
+      <div class="resp-grid" id="respGrid" style="display:none;">
+        <div class="resp-ok btn" onclick="app.respond('ok')">✅ Usuario responde OK</div>
+        <div class="resp-null btn" onclick="app.respond('fail')">❌ No responde / NULL</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">📟 Consola SMS (tramas)</div>
+      <div class="console" id="console">Sistema SHIELD inicializado. Mapa táctico activo. Esperando eventos...</div>
+    </section>
+
+    <section>
+      <div class="sec-head">📍 Eventos Activos en Mapa</div>
+      <div class="events-list" id="eventsList">Ningún evento activo.</div>
+      <button class="btn-reset" onclick="app.resetAll()">Restablecer simulación</button>
+    </section>
+  </div>
+
+<script>
+  /* ---- Estado ---- */
+  const CENTER = [-34.79, -58.27];
+  const MAP_BOUNDS = { minLat: -34.85, maxLat: -34.73, minLon: -58.32, maxLon: -58.22 };
+  let events = [];
+  let nextId = 482;
+  let pending = null;
+  let currentEventId = null;
+
+  const el = id => document.getElementById(id);
+
+  /* ---- Reloj ---- */
+  setInterval(() => {
+    el('clock').textContent = new Date().toLocaleTimeString('es-ES', { hour12: false });
+  }, 1000);
+
+  /* ---- Utilidades ---- */
+  function log(txt, type = 'info') {
+    const box = el('console');
+    const line = document.createElement('div');
+    line.className = 'console-line ' + type;
+    line.textContent = '> ' + txt;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function randCoord() {
+    const lat = CENTER[0] + (Math.random() - 0.5) * 0.016;
+    const lon = CENTER[1] + (Math.random() - 0.5) * 0.016;
+    return [lat, lon];
+  }
+
+  function priLabel(arr) {
+    const m = { child: 'Niño', elder: 'Adulto Mayor', disabled: 'Discapacidad' };
+    return arr.length ? arr.map(p => m[p] || p).join(' + ') : 'Estándar';
+  }
+
+  function coordToPx(lat, lon) {
+    const x = ((lon - MAP_BOUNDS.minLon) / (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon)) * 100;
+    const y = (1 - (lat - MAP_BOUNDS.minLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * 100;
+    return { x, y };
+  }
+
+  /* ---- Mapa ---- */
+  function renderMap() {
+    const container = el('markers');
+    container.innerHTML = '';
+    events.forEach(ev => {
+      const { x, y } = coordToPx(ev.lat, ev.lon);
+      const m = document.createElement('div');
+      m.className = 'marker ' + (ev.status === 'high' ? 'red' : ev.status === 'medium' ? 'yellow' : 'orange');
+      m.style.left = x + '%'; m.style.top = y + '%';
+      m.title = 'ID #' + ev.id;
+      m.onclick = (e) => { e.stopPropagation(); openPopup(ev); };
+      const inner = document.createElement('div');
+      inner.className = 'tag';
+      inner.textContent = ev.id;
+      m.appendChild(inner);
+      container.appendChild(m);
+    });
+  }
+
+  function renderList() {
+    const box = el('eventsList');
+    el('contadorPersonas').textContent = events.length;
+    if (!events.length) { box.innerHTML = '<span style="color:#64748b;">Ningún evento activo.</span>'; return; }
+    box.innerHTML = events.slice().reverse().map(ev => `
+      <div class="ev-item" onclick="openPopup(events.find(e=>e.id===${ev.id}))">
+        <div class="ev-dot" style="background:${ev.status==='high'?'#ef4444':ev.status==='medium'?'#fbbf24':'#f97316'}"></div>
+        <span class="ev-id">#${ev.id}</span>
+        <span class="ev-st">${ev.status==='high'?'ALTO':ev.status==='medium'?'MEDIO':'PENDIENTE'}</span>
+      </div>
+    `).join('');
+  }
+
+  /* ---- Pop-up ---- */
+  function openPopup(ev) {
+    currentEventId = ev.id;
+    const stClass = ev.status === 'high' ? 'st-high' : ev.status === 'medium' ? 'st-medium' : 'st-pending';
+    const stText = ev.status === 'high' ? 'ALTO' : ev.status === 'medium' ? 'MEDIO' : 'PENDIENTE';
+    el('popId').textContent = 'ID #' + ev.id;
+    el('popSt').className = 'badge-st ' + stClass;
+    el('popSt').textContent = stText;
+    el('popCoord').textContent = ev.lat.toFixed(4) + ', ' + ev.lon.toFixed(4);
+    el('popPri').textContent = priLabel(ev.priority);
+    el('popEnv').textContent = ev.environment === 'rural' ? 'Campo / Rural' : 'Ciudad / Urbana';
+    el('popStatus').textContent = ev.status;
+    el('popSms').textContent = ev.sms;
+    const p = el('popup');
+    p.style.display = 'block';
+    p.classList.add('show');
+  }
+
+  function closePopup() {
+    const p = el('popup');
+    p.classList.remove('show');
+    setTimeout(() => { p.style.display = 'none'; }, 250);
+    currentEventId = null;
+  }
+
+  /* ---- App ---- */
+  const app = {
+    init() {
+      el('btnAlert').style.display = 'block';
+      el('respGrid').style.display = 'none';
+      renderMap();
+      renderList();
+      log('Sistema SHIELD listo. Mapa táctico simulado activo.');
+    },
+
+    demoRapida() {
+      // Puntos dispersos dentro del área afectada (centro del mapa), evitando bordes/océano
+      const puntos = [
+        { lat: -34.785, lon: -58.265, priority: ['elder', 'disabled'], environment: 'rural', status: 'high', tipo: 'ALTO' },
+        { lat: -34.795, lon: -58.275, priority: ['child'], environment: 'urban', status: 'medium', tipo: 'MEDIO' },
+        { lat: -34.780, lon: -58.280, priority: [], environment: 'urban', status: 'pending', tipo: 'PENDIENTE' },
+        { lat: -34.800, lon: -58.270, priority: ['elder'], environment: 'rural', status: 'high', tipo: 'ALTO' },
+        { lat: -34.790, lon: -58.250, priority: ['child', 'disabled'], environment: 'urban', status: 'high', tipo: 'ALTO' },
+        { lat: -34.805, lon: -58.260, priority: [], environment: 'urban', status: 'medium', tipo: 'MEDIO' },
+        { lat: -34.770, lon: -58.290, priority: ['disabled'], environment: 'rural', status: 'high', tipo: 'ALTO' },
+        { lat: -34.810, lon: -58.240, priority: [], environment: 'urban', status: 'pending', tipo: 'PENDIENTE' },
+        { lat: -34.780, lon: -58.240, priority: ['elder'], environment: 'rural', status: 'medium', tipo: 'MEDIO' },
+        { lat: -34.800, lon: -58.290, priority: ['child'], environment: 'urban', status: 'high', tipo: 'ALTO' }
+      ];
+
+      puntos.forEach(p => {
+        const id = nextId++;
+        const ev = {
+          id, lat: p.lat, lon: p.lon,
+          priority: [...p.priority],
+          environment: p.environment,
+          status: p.status,
+          sms: p.status === 'high'
+            ? `SMS_RECV: ID=${id} | STATUS=NULL | RESP=FAILED | PRIORITY=HIGH`
+            : p.status === 'medium'
+              ? `SMS_RECV: ID=${id} | STATUS=OK | RESP=USER_CONFIRMED | PRIORITY=${p.priority.length ? 'HIGH' : 'STD'}`
+              : `SMS_SEND: ID=${id} | STATUS=PENDING | PRIORITY=${p.priority.length ? 'HIGH' : 'STD'}`,
+          ts: Date.now()
+        };
+        events.push(ev);
+        log(`Persona #${id} — ${p.tipo} — ${p.environment === 'rural' ? 'Rural' : 'Urbana'} — ${priLabel(p.priority)}`, 'send');
+      });
+
+      log(`DEMO RÁPIDA: ${puntos.length} personas desplegadas en el mapa.`, 'info');
+      renderMap();
+      renderList();
+      if (events.length) openPopup(events[0]);
+    },
+
+    simulateGNSS() {
+      const [lat, lon] = randCoord();
+      pending = { lat, lon, priority: [], environment: null };
+      el('gnssVal').textContent = lat.toFixed(4) + ', ' + lon.toFixed(4);
+      log(`GNSS_READ: ID=PENDING | LAT=${lat.toFixed(4)} | LON=${lon.toFixed(4)} | FIX=3D | OFFLINE=TRUE`, 'send');
+    },
+
+    togglePri(key, checked) {
+      if (!pending) { log('AVISO: Genere primero una posición GNSS.', 'err'); return; }
+      if (checked) { if (!pending.priority.includes(key)) pending.priority.push(key); }
+      else { pending.priority = pending.priority.filter(p => p !== key); }
+      this.renderChips();
+    },
+
+    renderChips() {
+      const box = el('chips');
+      const labels = { child: 'Niño', elder: 'Adulto Mayor', disabled: 'Discapacidad' };
+      box.innerHTML = '';
+      if (!pending || pending.priority.length === 0) {
+        box.innerHTML = '<span style="font-size:0.75rem;color:#64748b;">Sin prioridad (estándar)</span>';
+        return;
+      }
+      pending.priority.forEach(p => {
+        const c = document.createElement('span');
+        c.className = 'chip';
+        c.textContent = labels[p] || p;
+        box.appendChild(c);
+      });
+    },
+
+    setEnv(type) {
+      if (!pending) { log('AVISO: Genere primero una posición GNSS.', 'err'); return; }
+      pending.environment = type;
+      const action = type === 'rural'
+        ? '🚁 Ruta de Evacuación Satelital / Solicitud de Rescate por Helicóptero'
+        : '🏛️ Ruta Segura Terrestre / Asignación de Refugio Municipal';
+      const box = el('envAction');
+      box.textContent = action;
+      box.style.color = type === 'rural' ? '#fcd34d' : '#bfdbfe';
+      box.style.borderColor = type === 'rural' ? '#fbbf24' : '#3b82f6';
+      el('envRural').className = 'env-btn ' + (type === 'rural' ? 'active' : '');
+      el('envUrban').className = 'env-btn ' + (type === 'urban' ? 'active' : '');
+      log(`ZONE_DETECT: ${type === 'rural' ? 'RURAL' : 'URBAN'} | ACTION=${action.replace(/[^\w\s]/gi,' ')}`, 'send');
+    },
+
+    triggerAlert() {
+      if (!pending) { log('ERROR: No hay posición GNSS pendiente.', 'err'); return; }
+      const id = nextId++;
+      const [lat, lon] = [pending.lat, pending.lon];
+      const ev = {
+        id, lat, lon,
+        priority: [...pending.priority],
+        environment: pending.environment || 'urban',
+        status: 'pending',
+        sms: `SMS_SEND: ID=${id} | LAT=${lat.toFixed(4)} | LON=${lon.toFixed(4)} | STATUS=PENDING | PRIORITY=${pending.priority.length ? 'HIGH' : 'STD'}`,
+        ts: Date.now()
+      };
+      events.push(ev);
+      currentEventId = id;
+      log(ev.sms, 'send');
+      log('ESPERANDO RESPUESTA DE USUARIO...', 'info');
+      el('btnAlert').style.display = 'none';
+      el('respGrid').style.display = 'grid';
+      renderMap();
+      renderList();
+    },
+
+    respond(answer) {
+      const ev = events.find(e => e.id === currentEventId);
+      if (!ev) return;
+      if (answer === 'ok') {
+        ev.status = 'medium';
+        ev.sms = `SMS_RECV: ID=${ev.id} | STATUS=OK | RESP=USER_CONFIRMED | PRIORITY=${ev.priority.length ? 'HIGH' : 'STD'}`;
+        log(ev.sms, 'recv');
+        log('Resultado: RIESGO MEDIO → Punto Amarillo en mapa.', 'info');
+      } else {
+        ev.status = 'high';
+        ev.sms = `SMS_RECV: ID=${ev.id} | STATUS=NULL | RESP=FAILED | PRIORITY=HIGH`;
+        log(ev.sms, 'recv');
+        log('Resultado: RIESGO ALTO → Punto Rojo Pulsante (prioridad máxima).', 'err');
+      }
+      el('btnAlert').style.display = 'block';
+      el('respGrid').style.display = 'none';
+      pending = null;
+      el('gnssVal').textContent = '--, --';
+      el('envAction').textContent = 'Seleccione un entorno para ver la acción de respuesta.';
+      el('envAction').style.color = '#cbd5e1';
+      el('envAction').style.borderColor = '#1e293b';
+      el('envRural').className = 'env-btn';
+      el('envUrban').className = 'env-btn';
+      this.renderChips();
+      renderMap();
+      renderList();
+      openPopup(ev);
+    },
+
+    resetAll() {
+      events = [];
+      nextId = 482;
+      pending = null;
+      currentEventId = null;
+      closePopup();
+      el('gnssVal').textContent = '--, --';
+      el('btnAlert').style.display = 'block';
+      el('respGrid').style.display = 'none';
+      el('envAction').textContent = 'Seleccione un entorno para ver la acción de respuesta.';
+      el('envAction').style.color = '#cbd5e1';
+      el('envAction').style.borderColor = '#1e293b';
+      el('envRural').className = 'env-btn';
+      el('envUrban').className = 'env-btn';
+      this.renderChips();
+      log('SIMULACIÓN RESTABLECIDA.', 'info');
+      renderMap();
+      renderList();
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => app.init());
+  // Cerrar popup al hacer clic fuera (en el fondo del mapa)
+  document.getElementById('map-wrap').addEventListener('click', () => closePopup());
+</script>
+</body>
+</html>
