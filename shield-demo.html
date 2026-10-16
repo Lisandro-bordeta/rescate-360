@@ -118,6 +118,13 @@
   .popup-row { font-size: 12px; color: #94a3b8; margin: 7px 0; display: flex; justify-content: space-between; }
   .popup-row .val { color: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .popup-sms { margin-top: 12px; padding: 10px; background: #020617; border: 1px solid #1e293b; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: #fbbf24; word-break: break-all; }
+  .popup-sms-send { margin-top: 12px; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; }
+  .popup-sms-send textarea { width: 100%; background: #020617; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; padding: 8px; font-family: ui-monospace, monospace; font-size: 12px; resize: vertical; }
+  .popup-sms-send textarea::placeholder { color: #475569; }
+  .btn-sms-send { background: #1e3a8a; color: #bfdbfe; border: 1px solid #3b82f6; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-sms-send:hover { background: #2563eb; }
+  .btn-sms-cancel { background: transparent; color: #94a3b8; border: 1px solid #334155; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  .btn-sms-cancel:hover { color: #fff; border-color: #64748b; }
 
   /* ===== Panel de controles flotante ===== */
   #panel {
@@ -223,7 +230,7 @@
     <div id="map-streets"></div>
     <div id="area-afectada"><div id="area-label">ÁREA AFECTADA — 10% OPACIDAD</div></div>
     <div id="markers"></div>
-    <div id="popup">
+    <div id="popup" onclick="event.stopPropagation()">
       <button class="popup-close" onclick="closePopup()">✕</button>
       <div class="popup-header">
         <span class="popup-id" id="popId">ID #—</span>
@@ -234,6 +241,15 @@
       <div class="popup-row"><span>Entorno</span><span class="val" id="popEnv">—</span></div>
       <div class="popup-row"><span>Estado</span><span class="val" id="popStatus">—</span></div>
       <div class="popup-sms" id="popSms">—</div>
+      <div class="popup-sms-send" id="popSmsSend" style="display:none;">
+        <div style="font-size:11px; color:#94a3b8; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">Enviar mensaje a este punto</div>
+        <textarea id="popMsgText" rows="3" placeholder="Escribe el mensaje de SMS..."></textarea>
+        <div style="margin-top:8px; display:flex; gap:8px;">
+          <button class="btn-sms-send" onclick="app.sendCustomSms()">📤 Enviar SMS</button>
+          <button class="btn-sms-cancel" onclick="app.cancelCustomSms()">✕ Cancelar</button>
+        </div>
+        <div id="popSmsResult" style="margin-top:8px; font-size:11px; color:#34d399; font-family:ui-monospace,monospace;"></div>
+      </div>
     </div>
   </div>
 
@@ -384,6 +400,10 @@
     el('popEnv').textContent = ev.environment === 'rural' ? 'Campo / Rural' : 'Ciudad / Urbana';
     el('popStatus').textContent = ev.status;
     el('popSms').textContent = ev.sms;
+    // Mostrar bloque de envío de SMS
+    el('popSmsSend').style.display = 'block';
+    el('popMsgText').value = '';
+    el('popSmsResult').textContent = '';
     const p = el('popup');
     p.style.display = 'block';
     p.classList.add('show');
@@ -394,6 +414,9 @@
     p.classList.remove('show');
     setTimeout(() => { p.style.display = 'none'; }, 250);
     currentEventId = null;
+    el('popSmsSend').style.display = 'none';
+    el('popMsgText').value = '';
+    el('popSmsResult').textContent = '';
   }
 
   /* ---- App ---- */
@@ -539,6 +562,31 @@
       renderMap();
       renderList();
       openPopup(ev);
+    },
+
+    sendCustomSms() {
+      if (!currentEventId) return;
+      const ev = events.find(e => e.id === currentEventId);
+      if (!ev) return;
+      const texto = el('popMsgText').value.trim();
+      if (!texto) {
+        el('popSmsResult').textContent = 'Escribe un mensaje antes de enviar.';
+        el('popSmsResult').style.color = '#f87171';
+        return;
+      }
+      const sms = `SMS_SEND: ID=${ev.id} | LAT=${ev.lat.toFixed(4)} | LON=${ev.lon.toFixed(4)} | MSG="${texto}" | STATUS=SENT`;
+      log(sms, 'send');
+      el('popSmsResult').textContent = 'SMS enviado a ID #' + ev.id;
+      el('popSmsResult').style.color = '#34d399';
+      ev.sms = sms;
+      el('popSms').textContent = sms;
+      el('popMsgText').value = '';
+    },
+
+    cancelCustomSms() {
+      el('popSmsSend').style.display = 'none';
+      el('popMsgText').value = '';
+      el('popSmsResult').textContent = '';
     },
 
     resetAll() {
